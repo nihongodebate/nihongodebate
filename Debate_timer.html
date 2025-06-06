@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ディベートタイマー</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js CDN for sound generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* Custom font for better readability */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+            display: flex; /* Use flexbox for overall layout */
+            flex-direction: column; /* Stack children vertically */
+            align-items: center; /* Center children horizontally */
+            min-height: 100vh;
+            margin: 0;
+            padding-top: 50px; /* Space for the fixed header */
+            box-sizing: border-box;
+        }
+        .header-title {
+            position: fixed; /* Make header fixed at the top */
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 100; /* Ensure header is above other content */
+            background-color: #ffffff; /* White background for the fixed header */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+            padding: 10px 20px; /* Padding inside the fixed header */
+            display: flex;
+            align-items: center;
+            justify-content: center; /* Center content within the header */
+            font-size: 1.5rem; /* Adjust font size as needed */
+            font-weight: 700;
+            color: #1e3a8a;
+        }
+        .container {
+            background-color: #ffffff; /* White card background */
+            border-radius: 20px; /* Rounded corners */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); /* Soft shadow */
+            padding: 40px;
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+            text-align: center;
+            flex-grow: 1; /* Allow container to grow and fill available space */
+        }
+        .time-display {
+            font-size: 5rem; /* Large time display */
+            font-weight: 700;
+            color: #1e3a8a; /* Dark blue color */
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1); /* Subtle text shadow */
+        }
+        .speech-title {
+            font-size: 2.25rem; /* Large speech title */
+            font-weight: 600;
+            color: #334155; /* Slate gray */
+            margin-bottom: 15px;
+            min-height: 3rem; /* Ensure consistent height */
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+            gap: 20px; /* Increased gap for better spacing */
+            justify-content: center; /* Center buttons */
+            margin-bottom: 20px; /* Space before the speech list */
+        }
+        .button-group button {
+            flex-grow: 1; /* Allow buttons to grow and fill space */
+            min-width: 180px; /* Minimum width for buttons */
+            transition: all 0.2s ease-in-out;
+            transform: translateY(0);
+        }
+        .button-group button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        .button-group button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .dialog.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .dialog-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            font-size: 1.2rem;
+            color: #334155;
+            line-height: 1.3; /* 行間を狭くするために追加 */
+        }
+        .dialog-content button {
+            margin-top: 20px;
+            padding: 10px 25px;
+            background-color: #3b82f6; /* Blue */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+        .dialog-content button:hover {
+            background-color: #2563eb; /* Darker blue */
+        }
+
+        /* Speech List Styling */
+        #speechListContainer {
+            max-height: 300px; /* Limit height to prevent overflow */
+            overflow-y: auto; /* Enable scrolling if content exceeds max-height */
+            text-align: left; /* Align text within the list */
+            border: 1px solid #e2e8f0; /* Light border */
+            border-radius: 10px; /* Rounded corners for the container */
+            padding: 15px;
+        }
+
+        #speechList li {
+            padding: 10px 15px;
+            margin-bottom: 5px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f8fafc; /* Very light background for list items */
+            transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: default; /* Not directly clickable, so change cursor */
+        }
+
+        #speechList li:last-child {
+            margin-bottom: 0;
+        }
+
+        #speechList li.current-speech {
+            background-color: #e0f2fe; /* Light blue for current speech */
+            color: #1e40af; /* Darker blue text */
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow for highlight */
+            transform: scale(1.02); /* Slightly enlarge current speech */
+        }
+        #speechList li span:first-child {
+            flex-grow: 1; /* Speech name takes more space */
+        }
+        #speechList li span:last-child {
+            font-weight: normal; /* Duration doesn't need to be bold */
+            color: #64748b; /* Gray color for duration */
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                padding: 25px;
+            }
+            .time-display {
+                font-size: 4rem;
+            }
+            .speech-title {
+                font-size: 1.75rem;
+            }
+            .button-group {
+                flex-direction: column;
+                gap: 15px;
+            }
+            .button-group button {
+                width: 100%; /* Full width buttons on small screens */
+            }
+            .header-title {
+                font-size: 1.2rem; /* Smaller font on small screens */
+                padding: 8px 15px; /* Adjust padding for smaller header */
+            }
+            body {
+                padding-top: 60px; /* Adjust body padding for smaller header */
+            }
+        }
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+            }
+            .time-display {
+                font-size: 3rem;
+            }
+            .speech-title {
+                font-size: 1.5rem;
+            }
+            #speechListContainer {
+                max-height: 250px; /* Adjust max height for smaller screens */
+            }
+            .header-title {
+                font-size: 1rem; /* Even smaller font on very small screens */
+                padding: 6px 10px; /* Further adjust padding */
+            }
+            body {
+                padding-top: 50px; /* Adjust body padding for smallest header */
+            }
+        }
+        /* Styling for moderator scripts */
+        .moderator-script {
+            font-weight: bold;
+            color: #1e40af; /* Dark blue */
+        }
+    </style>
+</head>
+<body>
+    <!-- Header with only Title - Logo removed -->
+    <div class="header-title">
+        <span>한국대학생일본어디베이트대회 운영위원회</span>
+    </div>
+
+    <div class="container">
+        <!-- Debate type selection -->
+        <div class="debate-type-selection flex flex-col sm:flex-row gap-4 mb-6">
+            <label for="prepared" class="flex items-center cursor-pointer text-lg text-gray-700">
+                <input type="radio" id="prepared" name="debateType" value="prepared" class="mr-2 text-blue-600 focus:ring-blue-500 h-5 w-5">
+                準備型ディベート
+            </label>
+            <label for="impromptu" class="flex items-center cursor-pointer text-lg text-gray-700">
+                <input type="radio" id="impromptu" name="debateType" value="impromptu" class="mr-2 text-blue-600 focus:ring-blue-500 h-5 w-5">
+                即興型ディベート
+            </label>
+        </div>
+
+        <!-- Current speech title -->
+        <div id="speechTitle" class="speech-title">ディベートタイプを選択してください</div>
+
+        <!-- Time display -->
+        <div id="timeDisplay" class="time-display">00:00</div>
+
+        <!-- Control buttons -->
+        <div class="button-group">
+            <button id="startButton"
+                class="px-8 py-4 bg-blue-600 text-white rounded-xl text-2xl font-bold
+                       shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-4
+                       focus:ring-blue-300 transform transition-all duration-200 ease-in-out
+                       disabled:opacity-50 disabled:cursor-not-allowed">
+                スタート / 次へ
+            </button>
+            <button id="resetButton"
+                class="px-8 py-4 bg-gray-500 text-white rounded-xl text-2xl font-bold
+                       shadow-lg hover:bg-gray-600 focus:outline-none focus:ring-4
+                       focus:ring-gray-300 transform transition-all duration-200 ease-in-out">
+                リセット
+            </button>
+            <!-- Alarm Toggle Button -->
+            <button id="alarmToggleButton"
+                class="px-8 py-4 bg-purple-600 text-white rounded-xl text-2xl font-bold
+                       shadow-lg hover:bg-purple-700 focus:outline-none focus:ring-4
+                       focus:ring-purple-300 transform transition-all duration-200 ease-in-out">
+                アラームON
+            </button>
+        </div>
+
+        <!-- Speech List Display -->
+        <div id="speechListContainer" class="hidden mt-6 w-full max-w-sm">
+            <ul id="speechList" class="text-left text-base text-gray-700 bg-gray-50 p-4 rounded-lg shadow-inner">
+                <!-- Speech items will be dynamically inserted here -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Custom Dialog/Modal for alerts -->
+    <div id="customDialog" class="dialog">
+        <div class="dialog-content">
+            <p id="dialogMessage"></p>
+            <button id="dialogCloseButton">Start</button> <!-- 「OK」から「Start」に変更 -->
+        </div>
+    </div>
+
+    <script>
+        // Define speech sequences and durations in seconds
+        // Each speech now has a preTimerScript (shown BEFORE timer starts, waits for confirmation to start timer).
+        // postTimerScript (shown AFTER timer ends, auto-hides).
+        const preparedDebateSpeeches = [
+            {
+                name: "肯定側立論",
+                duration: 6 * 60,
+                preTimerScript: "まずはじめに、肯定側立論です。スピーカーは準備をお願いします。<br><br>時間は、６分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側準備時間",
+                duration: 2 * 60,
+                preTimerScript: "ありがとうございました。ここから否定側の準備時間となります。<br><br>時間は２分です。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側質疑",
+                duration: 3 * 60,
+                preTimerScript: "時間です。これより否定側質疑の時間です。<br><br>時間は3分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側立論",
+                duration: 6 * 60,
+                preTimerScript: "ありがとうございました。続きまして、否定側立論です。スピーカーは準備をお願いします。<br><br>時間は、６分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側準備時間",
+                duration: 2 * 60,
+                preTimerScript: "ありがとうございました。ここから肯定側の準備時間となります。<br><br>時間は２分です。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側質疑",
+                duration: 3 * 60,
+                preTimerScript: "時間です。これより肯定側質疑の時間です。<br><br>時間は3分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側準備時間",
+                duration: 2 * 60,
+                preTimerScript: "ありがとうございました。ここから否定側の準備時間となります。<br><br>時間は２分です。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側第1反駁",
+                duration: 4 * 60,
+                preTimerScript: "時間です。続きまして、否定側第１反ばくです。スピーカーは準備をお願いします。<br><br>時間は４分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側準備時間",
+                duration: 3 * 60,
+                preTimerScript: "ありがとうございました。ここから肯定側の準備時間となります。<br><br>時間は３分です。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側第1反駁",
+                duration: 4 * 60,
+                preTimerScript: "時間です。続きまして、肯定側第１反ばくです。スピーカーは準備をお願いします。<br><br>時間は４分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側準備時間",
+                duration: 2 * 60,
+                preTimerScript: "ありがとうございました。ここから否定側の準備時間となります。<br><br>時間は２分です。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側第2反駁",
+                duration: 4 * 60,
+                preTimerScript: "時間です。続きまして、否定側第２反ばくです。スピーカーは準備をお願いします。<br><br>時間は４分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側準備時間",
+                duration: 2 * 60,
+                preTimerScript: "ありがとうございました。ここから肯定側の準備時間となります。<br><br>時間は２分です。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側第2反駁",
+                duration: 4 * 60,
+                preTimerScript: "時間です。続きまして、肯定側第２反ばくです。スピーカーは準備をお願いします。<br><br>時間は４分です。では、お願いします。",
+                postTimerScript: "ありがとうございました。以上で、全てのスピーチが終了しました。" // Final message for the last speech
+            }
+        ];
+
+        // Impromptu debate speeches now include preTimerScript and postTimerScript
+        const impromptuDebateSpeeches = [
+            {
+                name: "肯定側立論",
+                duration: 3 * 60,
+                preTimerScript: "まずはじめに、肯定側立論です。スピーカーは準備をお願いします。<br><br>時間は、３分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側質疑",
+                duration: 1 * 60,
+                preTimerScript: "ありがとうございました。これより否定側質疑の時間です。<br><br>時間は１分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側立論",
+                duration: 3 * 60,
+                preTimerScript: "ありがとうございました。続きまして、否定側立論です。スピーカーは準備をお願いします。<br><br>時間は、３分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側質疑",
+                duration: 1 * 60,
+                preTimerScript: "ありがとうございました。これより肯定側質疑の時間です。<br><br>時間は１分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側反駁",
+                duration: 2 * 60,
+                preTimerScript: "ありがとうございました。続きまして、否定側反ばくです。スピーカーは準備をお願いします。<br><br>時間は２分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側準備時間",
+                duration: 1 * 60,
+                preTimerScript: "ありがとうございました。ここから肯定側の準備時間となります。<br><br>時間は１分です。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側反駁",
+                duration: 2 * 60,
+                preTimerScript: "時間です。続きまして、肯定側反ばくです。スピーカーは準備をお願いします。<br><br>時間は２分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側準備時間",
+                duration: 1 * 60,
+                preTimerScript: "ありがとうございました。ここから否定側の準備時間となります。<br><br>時間は１分です。",
+                postTimerScript: null
+            },
+            {
+                name: "否定側まとめ",
+                duration: 2 * 60,
+                preTimerScript: "時間です。続きまして、否定側のまとめです。スピーカーは準備をお願いします。<br><br>時間は２分です。では、お願いします。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側準備時間",
+                duration: 1 * 60,
+                preTimerScript: "ありがとうございました。ここから肯定側の準備時間となります。<br><br>時間は１分です。",
+                postTimerScript: null
+            },
+            {
+                name: "肯定側まとめ",
+                duration: 2 * 60,
+                preTimerScript: "時間です。続きまして、肯定側のまとめです。スピーカーは準備をお願いします。<br><br>時間は２分です。では、お願いします。",
+                postTimerScript: "ありがとうございました。以上で、全てのスピーチが終了しました。" // Final message for the last speech
+            }
+        ];
+
+        // UI elements
+        const timeDisplay = document.getElementById('timeDisplay');
+        const speechTitle = document.getElementById('speechTitle');
+        const startButton = document.getElementById('startButton');
+        const resetButton = document.getElementById('resetButton');
+        const debateTypeRadios = document.querySelectorAll('input[name="debateType"]');
+        const customDialog = document.getElementById('customDialog');
+        const dialogMessage = document.getElementById('dialogMessage');
+        const dialogCloseButton = document.getElementById('dialogCloseButton');
+        const alarmToggleButton = document.getElementById('alarmToggleButton');
+        const speechListContainer = document.getElementById('speechListContainer');
+        const speechList = document.getElementById('speechList');
+
+        // Timer state variables
+        let currentDebateType = null;
+        let speeches = [];
+        let currentSpeechIndex = 0;
+        let remainingTime = 0;
+        let timerInterval = null;
+        let isTimerRunning = false;
+        let isDebateStarted = false; // Tracks if the overall debate has begun
+        let scriptPhaseActive = false; // True if preTimerScript is displayed and waiting for "開始" click
+        let alarmEnabled = true;
+
+        // Tone.js synthesizer for alarm sound
+        let synth;
+
+        /**
+         * Initializes the Tone.js synthesizer and resumes the audio context
+         * on the first user interaction to ensure sound plays correctly.
+         */
+        function initAudio() {
+            synth = new Tone.Synth().toDestination();
+            // Resume audio context on first user interaction (e.g., mouse click anywhere)
+            document.documentElement.addEventListener('mousedown', () => {
+                if (Tone.context.state !== 'running') {
+                    Tone.context.resume();
+                }
+            }, { once: true });
+        }
+
+        /**
+         * Plays a short alarm sound using Tone.js if the alarm is enabled.
+         */
+        function playAlarm() {
+            // Only play if audio context is running and alarm is enabled
+            if (Tone.context.state === 'running' && alarmEnabled) {
+                synth.triggerAttackRelease('C5', '8n'); // Play a C5 note for an 8th note duration
+            }
+        }
+
+        // Function to format time for display (MM:SS)
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        /**
+         * Shows a custom dialog with a message. Can auto-hide after a delay.
+         * The message will be wrapped in "「」" and displayed in bold blue.
+         * @param {string} message - The message to display (can contain HTML like <br>).
+         * @param {boolean} [autoHide=false] - If true, the dialog will auto-hide after 3 seconds.
+         */
+        function showCustomDialog(message, autoHide = false) {
+            // Apply bold blue styling and wrap in 「」
+            dialogMessage.innerHTML = `「<span class="moderator-script">${message}</span>」`;
+            customDialog.classList.add('show');
+            // Clear any existing timeout before setting a new one
+            if (customDialog.dataset.hideTimeout) {
+                clearTimeout(parseInt(customDialog.dataset.hideTimeout));
+            }
+            if (autoHide) {
+                const timeoutId = setTimeout(hideCustomDialog, 3000); // Hide after 3 seconds
+                customDialog.dataset.hideTimeout = timeoutId.toString(); // Store timeout ID
+            }
+        }
+
+        // Function to hide custom dialog
+        function hideCustomDialog() {
+            customDialog.classList.remove('show');
+            // Clear any stored timeout ID when hidden manually or automatically
+            if (customDialog.dataset.hideTimeout) {
+                clearTimeout(parseInt(customDialog.dataset.hideTimeout));
+                delete customDialog.dataset.hideTimeout;
+            }
+        }
+
+        /**
+         * Renders the list of speeches for the current debate type.
+         * Highlights the current active speech.
+         */
+        function renderSpeechList() {
+            speechList.innerHTML = ''; // Clear existing list
+            if (speeches.length === 0) {
+                return;
+            }
+
+            speeches.forEach((speech, index) => {
+                const listItem = document.createElement('li');
+                listItem.classList.add('flex', 'justify-between', 'items-center', 'py-2', 'px-3', 'mb-1', 'rounded-md');
+                if (index === currentSpeechIndex) {
+                    listItem.classList.add('current-speech'); // Highlight current speech
+                }
+
+                const speechName = document.createElement('span');
+                speechName.textContent = `${index + 1}. ${speech.name}`;
+                speechName.classList.add('flex-grow'); // Allow name to take more space
+
+                const speechDuration = document.createElement('span');
+                speechDuration.textContent = formatTime(speech.duration);
+                speechDuration.classList.add('ml-4', 'text-gray-600'); // Style for duration
+
+                listItem.appendChild(speechName);
+                listItem.appendChild(speechDuration);
+                speechList.appendChild(listItem);
+            });
+            // Show the container once the list is rendered
+            speechListContainer.classList.remove('hidden');
+        }
+
+        /**
+         * Updates the main UI elements (speech title, time display, button state)
+         * and refreshes the speech list highlighting.
+         */
+        function updateUI() {
+            if (speeches.length > 0 && currentSpeechIndex < speeches.length) {
+                speechTitle.textContent = speeches[currentSpeechIndex].name;
+                timeDisplay.textContent = formatTime(remainingTime);
+            } else {
+                speechTitle.textContent = 'ディベートタイプを選択してください';
+                timeDisplay.textContent = '00:00';
+            }
+            // Disable start button if no debate type is selected or all speeches are done
+            startButton.disabled = !currentDebateType || (isDebateStarted && currentSpeechIndex >= speeches.length);
+
+            // Update highlighting in the speech list
+            const listItems = speechList.children;
+            for (let i = 0; i < listItems.length; i++) {
+                listItems[i].classList.remove('current-speech');
+            }
+            if (currentSpeechIndex < speeches.length) {
+                if (listItems[currentSpeechIndex]) {
+                    listItems[currentSpeechIndex].classList.add('current-speech');
+                    // Scroll to current speech if necessary (optional, but good UX)
+                    listItems[currentSpeechIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        }
+
+        /**
+         * Helper function to actually start the timer countdown.
+         */
+        function _actuallyStartTimer() {
+            isTimerRunning = true;
+            startButton.textContent = 'スキップ / 次へ';
+            updateUI(); // Reflect time and button state
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(timerCountdownLogic, 1000);
+        }
+
+        /**
+         * Handles the main timer countdown logic. Called every second by setInterval.
+         */
+        function timerCountdownLogic() {
+            if (remainingTime > 0) {
+                remainingTime--;
+                timeDisplay.textContent = formatTime(remainingTime);
+            } else {
+                // Timer has reached zero (natural end of speech)
+                clearInterval(timerInterval);
+                isTimerRunning = false; // Important: ensure timer is stopped
+
+                if (alarmEnabled) {
+                    playAlarm();
+                }
+
+                const currentSpeech = speeches[currentSpeechIndex]; // Get speech that just ended
+
+                // If this was the last speech, handle debate end
+                if (currentSpeechIndex >= speeches.length - 1) {
+                    speechTitle.textContent = 'ディベート終了！';
+                    timeDisplay.textContent = '00:00';
+                    startButton.disabled = true; // No more speeches to start
+
+                    if (currentSpeech.postTimerScript) {
+                        showCustomDialog(currentSpeech.postTimerScript, true); // Final post-script for last speech
+                    } else {
+                        showCustomDialog("ディベートが終了しました。お疲れ様でした！", true);
+                    }
+                    updateUI(); // Update UI for final state
+                    return; // Debate has ended, no more actions
+                }
+
+                // Not the last speech, so advance to the next one automatically
+                currentSpeechIndex++;
+                const nextSpeech = speeches[currentSpeechIndex];
+                remainingTime = nextSpeech.duration;
+
+                // Handle preTimerScript for the NEXT speech
+                if (nextSpeech.preTimerScript) {
+                    // Prepend "時間です。" to the script because the timer just ended
+                    const messageToShow = "時間です。<br><br>" + nextSpeech.preTimerScript;
+                    showCustomDialog(messageToShow);
+                    scriptPhaseActive = true;
+                    startButton.textContent = '開始';
+                } else {
+                    // No preTimerScript for next speech, start countdown immediately
+                    // Prepend "時間です。" to the generic message as the timer just ended
+                    showCustomDialog(`時間です。<br><br>次のスピーチ「${nextSpeech.name}」を開始します。`, true); // Auto-hide
+                    _actuallyStartTimer(); // Start timer immediately for the next speech
+                }
+
+                updateUI(); // Update UI with details of the next speech and button state
+            }
+        }
+
+        /**
+         * Main function to start, continue, or skip to the next speech,
+         * handling pre-timer scripts and confirmation.
+         */
+        function startTimer() {
+            if (!currentDebateType) {
+                showCustomDialog("ディベートタイプを選択してください。");
+                return;
+            }
+
+            // Ensure currentSpeechIndex is valid (should always be if debateType is selected)
+            if (currentSpeechIndex >= speeches.length) {
+                showCustomDialog("すべてのスピーチが終了しました。リセットしてください。");
+                return;
+            }
+            const currentSpeech = speeches[currentSpeechIndex]; // Get current speech object
+
+            // --- Case 1: User clicked "開始" to confirm pre-script and start timer ---
+            if (scriptPhaseActive) {
+                scriptPhaseActive = false; // Exit script phase
+                hideCustomDialog(); // Hide the script dialog
+                _actuallyStartTimer(); // Immediately start timer
+                return; // Timer started, exit function
+            }
+
+            // --- Case 2: User clicked "スキップ / 次へ" while timer is running ---
+            if (isTimerRunning) {
+                clearInterval(timerInterval);
+                isTimerRunning = false; // Timer stopped
+
+                currentSpeechIndex++; // Advance to the next speech
+                if (currentSpeechIndex < speeches.length) {
+                    const nextSpeech = speeches[currentSpeechIndex];
+                    remainingTime = nextSpeech.duration; // Set time for the NEXT speech
+
+                    // If next speech has a preTimerScript, show it and wait for confirmation
+                    // Note: "時間です。" is NOT prepended here as this is a manual skip, not a natural timer end.
+                    if (nextSpeech.preTimerScript) {
+                        showCustomDialog(nextSpeech.preTimerScript);
+                        scriptPhaseActive = true;
+                        startButton.textContent = '開始'; // User needs to click again to start this speech
+                    } else {
+                        // No preTimerScript for next speech, start timer immediately
+                        // Note: "時間です。" is NOT prepended here as this is a manual skip.
+                        showCustomDialog(`次のスピーチ「${nextSpeech.name}」を開始します。`, true); // General skip message, auto-hide
+                        _actuallyStartTimer(); // Start timer directly
+                    }
+                } else {
+                    // Skipped the very last speech or no more speeches after skip
+                    speechTitle.textContent = 'ディベート終了！';
+                    timeDisplay.textContent = '00:00';
+                    startButton.disabled = true;
+                    showCustomDialog("すべてのスピーチが終了しました。お疲れ様でした！"); // Final message
+                }
+                updateUI(); // Update UI for new speech, button text, highlight
+                return; // Action handled, exit
+            }
+
+            // --- Case 3: Timer is NOT running (initial state, or after natural end/skip) ---
+            // and not in script phase (already handled above).
+            // This is a request to start the current/next speech.
+
+            // If debate hasn't started yet, or previous speech ended (naturally)
+            if (!isDebateStarted || remainingTime <= 0) {
+                if (isDebateStarted && remainingTime <= 0) { // If previous speech ended, move to next
+                    currentSpeechIndex++;
+                }
+                isDebateStarted = true; // Mark debate as started
+            }
+
+            // Check if we are at the end of all speeches (after potential index increment)
+            if (currentSpeechIndex >= speeches.length) {
+                speechTitle.textContent = 'ディベート終了！';
+                timeDisplay.textContent = '00:00';
+                startButton.disabled = true;
+                showCustomDialog("すべてのスピーチが終了しました。お疲れ様でした！");
+                return;
+            }
+
+            const currentSpeechToStart = speeches[currentSpeechIndex]; // Get the speech to start now
+
+            // If there's a preTimerScript for this speech, display it first and wait for confirmation
+            // Note: "時間です。" is NOT prepended here as this is an initial start, not a natural timer end.
+            if (currentSpeechToStart.preTimerScript) {
+                showCustomDialog(currentSpeechToStart.preTimerScript);
+                scriptPhaseActive = true;
+                startButton.textContent = '開始'; // Wait for user to confirm
+                remainingTime = currentSpeechToStart.duration; // Set duration for display *before* timer starts
+                updateUI(); // Update UI
+                return; // Don't start timer yet, wait for next click (Case 1)
+            }
+
+            // If no preTimerScript (or impromptu debate), start timer directly
+            remainingTime = currentSpeechToStart.duration;
+            _actuallyStartTimer(); // Start timer directly
+        }
+
+        // Function to reset the timer
+        function resetTimer() {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            isDebateStarted = false;
+            scriptPhaseActive = false; // Reset script phase
+            currentSpeechIndex = 0;
+            remainingTime = 0;
+            hideCustomDialog(); // Hide any open dialog
+
+            if (currentDebateType === 'prepared') {
+                speeches = [...preparedDebateSpeeches];
+            } else if (currentDebateType === 'impromptu') {
+                speeches = [...impromptuDebateSpeeches];
+            } else {
+                speeches = [];
+            }
+            // Update speech title and time display based on current debate type or initial state
+            speechTitle.textContent = currentDebateType ? speeches[0]?.name : 'ディベートタイプを選択してください';
+            timeDisplay.textContent = '00:00';
+            startButton.disabled = !currentDebateType;
+            startButton.textContent = 'スタート / 次へ'; // Reset button text
+
+            // Re-render the list and update highlighting after reset
+            renderSpeechList();
+            // Hide the list if no debate type is selected (clean initial state)
+            if (!currentDebateType) {
+                speechListContainer.classList.add('hidden');
+            }
+        }
+
+        // Event listener for debate type selection
+        debateTypeRadios.forEach(radio => {
+            radio.addEventListener('change', (event) => {
+                currentDebateType = event.target.value;
+                resetTimer(); // Reset the timer and re-render list when a new type is selected
+                if (currentDebateType === 'prepared') {
+                    speeches = [...preparedDebateSpeeches];
+                } else { // impromptu
+                    speeches = [...impromptuDebateSpeeches];
+                }
+                // Initialize display with the first speech of the selected type
+                if (speeches.length > 0) {
+                    speechTitle.textContent = speeches[0].name;
+                    timeDisplay.textContent = formatTime(speeches[0].duration);
+                    remainingTime = speeches[0].duration; // Set initial remaining time for display
+                }
+                startButton.disabled = false; // Enable start button once a type is selected
+                startButton.textContent = 'スタート / 次へ'; // Ensure button text is correct
+                renderSpeechList(); // Render the list for the newly selected type
+            });
+        });
+
+        // Event listener for Start/Next button
+        startButton.addEventListener('click', startTimer);
+
+        // Event listener for Reset button
+        resetButton.addEventListener('click', resetTimer);
+
+        // Event listener for Alarm Toggle button
+        alarmToggleButton.addEventListener('click', () => {
+            alarmEnabled = !alarmEnabled; // Toggle alarm state
+            alarmToggleButton.textContent = alarmEnabled ? 'アラームON' : 'アラームOFF'; // Update button text
+            // Ensure audio context is resumed if alarm is turned ON for the first time
+            if (alarmEnabled && Tone.context.state !== 'running') {
+                Tone.context.resume();
+            }
+        });
+
+        // Event listener for dialog close button
+        dialogCloseButton.addEventListener('click', () => {
+            hideCustomDialog();
+            // If the dialog was active for a pre-timer script, immediately start the timer
+            if (scriptPhaseActive) {
+                scriptPhaseActive = false; // Reset the flag
+                _actuallyStartTimer(); // Directly start the timer
+            }
+        });
+
+        // Initial UI setup on document load
+        document.addEventListener('DOMContentLoaded', () => {
+            initAudio(); // Initialize Tone.js synthesizer
+            resetTimer(); // Ensures initial state is clean and buttons are correctly disabled
+            // If a radio button is pre-selected (e.g., by browser history), manually trigger change
+            const selectedRadio = document.querySelector('input[name="debateType"]:checked');
+            if (selectedRadio) {
+                currentDebateType = selectedRadio.value;
+                if (currentDebateType === 'prepared') {
+                    speeches = [...preparedDebateSpeeches];
+                } else { // impromptu
+                    speeches = [...impromptuDebateSpeeches];
+                }
+                if (speeches.length > 0) {
+                    speechTitle.textContent = speeches[0].name;
+                    timeDisplay.textContent = formatTime(speeches[0].duration);
+                    remainingTime = speeches[0].duration; // Set initial remaining time
+                }
+                startButton.disabled = false;
+                startButton.textContent = 'スタート / 次へ'; // Ensure button text is correct
+                renderSpeechList(); // Render initial list if type is pre-selected
+            }
+        });
+    </script>
+</body>
+</html>
